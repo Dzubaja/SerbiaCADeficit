@@ -20,10 +20,11 @@ _SHARED_CSS = """
         max-width: 1400px;
     }
 
+
     /* ── KPI Cards (structure) ─────────────────────────────────────── */
     .kpi-card {
-        border-radius: 16px;
-        padding: 22px 20px 18px;
+        border-radius: 12px;
+        padding: 14px 14px 12px;
         text-align: center;
         position: relative;
         overflow: hidden;
@@ -39,30 +40,30 @@ _SHARED_CSS = """
         left: 0;
         right: 0;
         height: 3px;
-        border-radius: 16px 16px 0 0;
+        border-radius: 12px 12px 0 0;
     }
     .kpi-card .kpi-label {
-        font-size: 0.72rem;
+        font-size: 0.6rem;
         font-weight: 600;
         text-transform: uppercase;
-        letter-spacing: 1.2px;
-        margin-bottom: 10px;
+        letter-spacing: 1px;
+        margin-bottom: 6px;
     }
     .kpi-card .kpi-value {
-        font-size: 1.75rem;
+        font-size: 1.25rem;
         font-weight: 800;
-        margin-bottom: 4px;
+        margin-bottom: 2px;
         letter-spacing: -0.5px;
     }
     .kpi-card .kpi-sub {
-        font-size: 0.7rem;
+        font-size: 0.55rem;
         font-weight: 500;
         letter-spacing: 0.3px;
     }
     .kpi-card .kpi-change {
-        font-size: 0.88rem;
+        font-size: 0.7rem;
         font-weight: 600;
-        margin-top: 6px;
+        margin-top: 4px;
         letter-spacing: 0.3px;
     }
 

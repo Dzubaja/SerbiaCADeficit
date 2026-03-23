@@ -706,11 +706,19 @@ def fdi_by_country_chart(country_df, title="FDI Inflows by Country"):
             hovertemplate=f"{country}: " + "<b>%{y:,.0f}</b><extra></extra>",
         ))
 
-    layout = _base_layout(title, height=460)
+    layout = _base_layout(title, height=460, show_legend=True)
     fig.update_layout(**layout)
-    fig.update_layout(barmode="stack",
-                      yaxis_title=dict(text="EUR millions",
-                      font=dict(size=12, color=COLORS["dim"])))
+    fig.update_layout(
+        barmode="stack",
+        yaxis_title=dict(text="EUR millions",
+                         font=dict(size=12, color=COLORS["dim"])),
+        legend=dict(
+            orientation="h", yanchor="top", y=-0.15,
+            xanchor="center", x=0.5,
+            font=dict(size=10, color=COLORS["muted"]),
+        ),
+        margin=dict(l=56, r=24, t=56, b=100),
+    )
     return fig
 
 
@@ -742,11 +750,19 @@ def fdi_by_sector_chart(sector_df, title="FDI Inflows by Sector"):
             hovertemplate=f"{sector}: " + "<b>%{y:,.0f}</b><extra></extra>",
         ))
 
-    layout = _base_layout(title, height=460)
+    layout = _base_layout(title, height=460, show_legend=True)
     fig.update_layout(**layout)
-    fig.update_layout(barmode="stack",
-                      yaxis_title=dict(text="EUR millions",
-                      font=dict(size=12, color=COLORS["dim"])))
+    fig.update_layout(
+        barmode="stack",
+        yaxis_title=dict(text="EUR millions",
+                         font=dict(size=12, color=COLORS["dim"])),
+        legend=dict(
+            orientation="h", yanchor="top", y=-0.15,
+            xanchor="center", x=0.5,
+            font=dict(size=10, color=COLORS["muted"]),
+        ),
+        margin=dict(l=56, r=24, t=56, b=100),
+    )
     return fig
 
 
@@ -849,28 +865,18 @@ def fdi_ca_coverage_chart(cov_df):
         hovertemplate="%{x}: <b>%{y:.1f}%</b><extra></extra>",
     ))
 
-    # FDI EUR amount as text inside bars
+    # Net FDI line on secondary Y axis
     if has_fdi:
-        fdi_texts = [f"{abs(v):,.0f}" for v in cov_df["Net FDI"]]
         fig.add_trace(go.Scatter(
             x=cov_df["year"],
-            y=cov_df["coverage"] * 0.5,
-            mode="text",
-            text=fdi_texts,
-            textfont=dict(size=9, color="rgba(255,255,255,0.85)",
-                          weight=600),
-            showlegend=False,
-            hoverinfo="skip",
-        ))
-
-    # 3-year rolling average
-    if len(cov_df) >= 3:
-        roll = cov_df["coverage"].rolling(3, center=True).mean()
-        fig.add_trace(go.Scatter(
-            x=cov_df["year"], y=roll,
-            name="3-yr avg", mode="lines",
-            line=dict(color=COLORS["purple"], width=2, dash="dot"),
-            hovertemplate="3-yr avg: <b>%{y:.1f}%</b><extra></extra>",
+            y=cov_df["Net FDI"].abs(),
+            name="Net FDI (EUR mn)",
+            mode="lines+markers",
+            yaxis="y2",
+            line=dict(color=COLORS["purple"], width=2.5, shape="spline"),
+            marker=dict(size=6, color=COLORS["purple"],
+                        line=dict(width=2, color=COLORS["bg"])),
+            hovertemplate="%{x}: <b>%{y:,.0f}</b> EUR mn<extra></extra>",
         ))
 
     fig.add_hline(y=100, line_dash="dash", line_color=COLORS["red"],
@@ -886,19 +892,28 @@ def fdi_ca_coverage_chart(cov_df):
         yaxis_title=dict(text="%",
                          font=dict(size=12, color=COLORS["dim"])),
         yaxis_range=[0, max(cov_df["coverage"].max() * 1.15, 120)],
+        yaxis2=dict(
+            title=dict(text="EUR millions",
+                       font=dict(size=12, color=COLORS["dim"])),
+            overlaying="y", side="right",
+            showgrid=False,
+            tickfont=dict(size=10, color=COLORS["muted"]),
+            range=[0, cov_df["Net FDI"].abs().max() * 1.3]
+            if has_fdi else None,
+        ),
     )
     return fig
 
 
-def fdi_sector_latest_chart(sector_df):
-    """Horizontal bar: sector breakdown for the latest year."""
+def fdi_sector_latest_chart(sector_df, year=None):
+    """Horizontal bar: sector breakdown for a selected year."""
     if sector_df.empty:
         return go.Figure()
 
     color_map = _sector_color_map(sector_df)
 
-    latest_year = sector_df["year"].max()
-    latest = sector_df[sector_df["year"] == latest_year].copy()
+    selected_year = year if year is not None else sector_df["year"].max()
+    latest = sector_df[sector_df["year"] == selected_year].copy()
     latest = latest.sort_values("value", ascending=True)
 
     bar_colors = [color_map.get(s, COLORS["muted"]) for s in latest["sector_short"]]
@@ -915,7 +930,7 @@ def fdi_sector_latest_chart(sector_df):
         hovertemplate="%{y}: <b>%{x:,.0f}</b> EUR mn<extra></extra>",
     ))
 
-    layout = _base_layout(f"FDI by Sector ({latest_year})",
+    layout = _base_layout(f"FDI by Sector ({selected_year})",
                           height=500, show_legend=False)
     fig.update_layout(**layout)
     fig.update_layout(

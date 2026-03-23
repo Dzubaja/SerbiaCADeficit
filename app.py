@@ -39,7 +39,7 @@ st.set_page_config(
 )
 
 # ── Theme toggle ──────────────────────────────────────────────────────
-theme = "dark" if st.session_state.get("dark_mode", True) else "light"
+theme = "dark" if st.session_state.get("dark_mode", False) else "light"
 set_theme(theme)
 st.markdown(
     '<meta name="viewport" content="width=device-width, initial-scale=1.0, '
@@ -112,7 +112,7 @@ with col_title:
         unsafe_allow_html=True,
     )
 with col_toggle:
-    st.toggle("Dark mode", value=True, key="dark_mode")
+    st.toggle("Dark mode", value=False, key="dark_mode")
 with col_info:
     accent = COLORS["cyan"]
     st.markdown(
@@ -122,78 +122,61 @@ with col_info:
         unsafe_allow_html=True,
     )
 
-st.markdown("---")
+st.markdown("<div style='margin-top: 0.3rem'></div>", unsafe_allow_html=True)
+
+# No year filter — use full data range
+ca_f = data["ca"]
+comp_f = data["comp"]
+ca_gdp_f = data["ca_gdp"]
+fa_f = data["fa"]
+trade_f = data["trade"]
+cov_f = data["fdi_cov"]
 
 
-# ── Filters ────────────────────────────────────────────────────────────
+# ── KPI helper (rendered inside each tab so tabs appear above) ────────
 
-fcol1, _, _ = st.columns([1, 1, 2])
-with fcol1:
-    year_min = int(data["ca"]["year"].min())
-    year_max = int(data["ca"]["year"].max())
-    year_range = st.slider(
-        "Year range", year_min, year_max, (year_min, year_max),
-        key="year_range"
-    )
-
-# Apply year filter to all datasets
-mask_ca = (data["ca"]["year"] >= year_range[0]) & (data["ca"]["year"] <= year_range[1])
-mask_comp = (data["comp"]["year"] >= year_range[0]) & (data["comp"]["year"] <= year_range[1])
-
-ca_f = data["ca"][mask_ca]
-comp_f = data["comp"][mask_comp]
-ca_gdp_f = data["ca_gdp"][
-    (data["ca_gdp"]["year"] >= year_range[0]) & (data["ca_gdp"]["year"] <= year_range[1])
-]
-fa_f = data["fa"][(data["fa"]["year"] >= year_range[0]) & (data["fa"]["year"] <= year_range[1])]
-trade_f = data["trade"][(data["trade"]["year"] >= year_range[0]) & (data["trade"]["year"] <= year_range[1])]
-cov_f = data["fdi_cov"][(data["fdi_cov"]["year"] >= year_range[0]) & (data["fdi_cov"]["year"] <= year_range[1])]
-
-
-# ── KPI Cards ──────────────────────────────────────────────────────────
-
-k1, k2, k3, k4, k5 = st.columns(5)
-with k1:
-    st.markdown(kpi_card(
-        "Current Account", kpis["ca"],
-        css_class="kpi-negative" if kpis["ca"] < 0 else "kpi-positive",
-        sub_text=str(kpis["year"]),
-        change=kpis.get("ca_change"), change_pct=kpis.get("ca_pct"),
-    ), unsafe_allow_html=True)
-with k2:
-    st.markdown(kpi_card(
-        "Trade Balance", kpis["goods"],
-        css_class="kpi-negative" if kpis["goods"] < 0 else "kpi-positive",
-        sub_text=str(kpis["year"]),
-        change=kpis.get("goods_change"), change_pct=kpis.get("goods_pct"),
-    ), unsafe_allow_html=True)
-with k3:
-    st.markdown(kpi_card(
-        "Services Surplus", kpis["services"],
-        css_class="kpi-positive" if kpis["services"] > 0 else "kpi-negative",
-        sub_text=str(kpis["year"]),
-        change=kpis.get("services_change"), change_pct=kpis.get("services_pct"),
-    ), unsafe_allow_html=True)
-with k4:
-    st.markdown(kpi_card(
-        "FDI Net Inflow", kpis["fdi"],
-        css_class="kpi-neutral",
-        sub_text=str(kpis["year"]),
-        change=kpis.get("fdi_change"), change_pct=kpis.get("fdi_pct"),
-    ), unsafe_allow_html=True)
-with k5:
-    fx_sub = str(kpis.get("fx_year", "latest"))
-    st.markdown(kpi_card(
-        "NBS FX Reserves", kpis["fx_reserves"],
-        css_class="kpi-neutral",
-        sub_text=fx_sub,
-        change=kpis.get("fx_change"), change_pct=kpis.get("fx_pct"),
-    ), unsafe_allow_html=True)
-
-st.markdown("<div style='margin-top: 0.8rem'></div>", unsafe_allow_html=True)
+def _render_kpis():
+    """Render the 5 top-level KPI cards."""
+    k1, k2, k3, k4, k5 = st.columns(5)
+    with k1:
+        st.markdown(kpi_card(
+            "Current Account", kpis["ca"],
+            css_class="kpi-negative" if kpis["ca"] < 0 else "kpi-positive",
+            sub_text=str(kpis["year"]),
+            change=kpis.get("ca_change"), change_pct=kpis.get("ca_pct"),
+        ), unsafe_allow_html=True)
+    with k2:
+        st.markdown(kpi_card(
+            "Trade Balance", kpis["goods"],
+            css_class="kpi-negative" if kpis["goods"] < 0 else "kpi-positive",
+            sub_text=str(kpis["year"]),
+            change=kpis.get("goods_change"), change_pct=kpis.get("goods_pct"),
+        ), unsafe_allow_html=True)
+    with k3:
+        st.markdown(kpi_card(
+            "Services Surplus", kpis["services"],
+            css_class="kpi-positive" if kpis["services"] > 0 else "kpi-negative",
+            sub_text=str(kpis["year"]),
+            change=kpis.get("services_change"), change_pct=kpis.get("services_pct"),
+        ), unsafe_allow_html=True)
+    with k4:
+        st.markdown(kpi_card(
+            "FDI Net Inflow", kpis["fdi"],
+            css_class="kpi-neutral",
+            sub_text=str(kpis["year"]),
+            change=kpis.get("fdi_change"), change_pct=kpis.get("fdi_pct"),
+        ), unsafe_allow_html=True)
+    with k5:
+        fx_sub = str(kpis.get("fx_year", "latest"))
+        st.markdown(kpi_card(
+            "NBS FX Reserves", kpis["fx_reserves"],
+            css_class="kpi-neutral",
+            sub_text=fx_sub,
+            change=kpis.get("fx_change"), change_pct=kpis.get("fx_pct"),
+        ), unsafe_allow_html=True)
 
 
-# ── Tabs ───────────────────────────────────────────────────────────────
+# ── Tabs (above KPIs) ────────────────────────────────────────────────
 
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "  Current Account  ",
@@ -207,6 +190,7 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
 # ── Tab 1: Current Account ────────────────────────────────────────────
 
 with tab1:
+    _render_kpis()
     c1, c2 = st.columns(2)
     with c1:
         fig_ca = ca_trend_chart(ca_f, ca_gdp_f)
@@ -243,6 +227,7 @@ with tab1:
 # ── Tab 2: Trade & Financing ──────────────────────────────────────────
 
 with tab2:
+    _render_kpis()
     c1, c2 = st.columns(2)
     with c1:
         fig_trade = trade_chart(trade_f)
@@ -260,6 +245,7 @@ with tab2:
 # ── Tab 4: External Position ──────────────────────────────────────────
 
 with tab4:
+    _render_kpis()
     c1, c2 = st.columns(2)
     with c1:
         if data["fx"] is not None and not data["fx"].empty:
@@ -300,6 +286,7 @@ with tab4:
 # ── Tab 5: BOP Granular Breakdown ────────────────────────────────────
 
 with tab5:
+    _render_kpis()
     ca_gran = data["ca_granular"]
     if not ca_gran.empty:
         # Available year columns (int)
@@ -451,6 +438,7 @@ with tab5:
 # ── Tab 3: FDI Deep Dive ─────────────────────────────────────────────
 
 with tab3:
+    _render_kpis()
     st.markdown('<div class="section-header">FDI Overview</div>',
                 unsafe_allow_html=True)
 
@@ -563,13 +551,6 @@ with tab3:
 
         fdi_country = get_fdi_by_country(top_n=top_n)
 
-        # Year filter
-        if not fdi_country.empty:
-            fdi_country = fdi_country[
-                (fdi_country["year"] >= year_range[0]) &
-                (fdi_country["year"] <= year_range[1])
-            ]
-
         c1, c2 = st.columns([2, 1])
         with c1:
             fig = fdi_by_country_chart(fdi_country)
@@ -583,10 +564,6 @@ with tab3:
                     unsafe_allow_html=True)
         fdi_country_all = get_fdi_by_country(top_n=999)
         if not fdi_country_all.empty:
-            fdi_country_all = fdi_country_all[
-                (fdi_country_all["year"] >= year_range[0]) &
-                (fdi_country_all["year"] <= year_range[1])
-            ]
             pivot = fdi_country_all.pivot_table(
                 index="country", columns="year", values="value", aggfunc="sum"
             ).round(0)
@@ -598,22 +575,27 @@ with tab3:
     # ── FDI by Sector ───────────────────────────────────────────────
     with fdi_tab2:
         sector_df = data["fdi_sectors"]
+        sector_f = sector_df
 
-        # Year filter
-        if not sector_df.empty:
-            sector_f = sector_df[
-                (sector_df["year"] >= year_range[0]) &
-                (sector_df["year"] <= year_range[1])
-            ]
+        # Year selector — sits in the right-column area, inline before charts
+        if not sector_f.empty:
+            sector_years = sorted(sector_f["year"].unique(), reverse=True)
+            _lpad, _rpad, _sel = st.columns([5, 2, 1])
+            with _sel:
+                sel_year = st.selectbox("Year", sector_years, index=0,
+                                        key="fdi_sector_year", label_visibility="collapsed")
         else:
-            sector_f = sector_df
+            sel_year = None
 
         c1, c2 = st.columns(2)
         with c1:
             fig = fdi_by_sector_chart(sector_f)
             st.plotly_chart(fig, use_container_width=True)
         with c2:
-            fig = fdi_sector_latest_chart(sector_f)
+            if sel_year is not None:
+                fig = fdi_sector_latest_chart(sector_f, year=sel_year)
+            else:
+                fig = fdi_sector_latest_chart(sector_f)
             st.plotly_chart(fig, use_container_width=True)
 
         # Sector table
