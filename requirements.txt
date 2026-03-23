@@ -1,5 +1,6 @@
 pandas
 openpyxl
 xlrd
-streamlit
+streamlit==1.45.0
 plotly
+altair<6
