@@ -28,6 +28,7 @@ from dashboard.charts import (
     set_theme, COLORS,
 )
 from dashboard.styles import get_css, kpi_card
+from banking.page import render as render_banking
 
 # ── Page config ────────────────────────────────────────────────────────
 
@@ -178,12 +179,13 @@ def _render_kpis():
 
 # ── Tabs (above KPIs) ────────────────────────────────────────────────
 
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "  Current Account  ",
     "  Trade & Financing  ",
     "  FDI Deep Dive  ",
     "  External Position  ",
     "  Component Rankings  ",
+    "  Banking Sector  ",
 ])
 
 
@@ -693,3 +695,9 @@ with tab3:
                 fdi_min_yr = int(fdi_analytics["year"].min())
                 fdi_max_yr = int(fdi_analytics["year"].max())
                 st.metric(f"Total FDI ({fdi_min_yr}-{fdi_max_yr})", f"{total_cum:,.0f} EUR mn")
+
+
+# ── Tab 6: Banking Sector ─────────────────────────────────────────────
+
+with tab6:
+    render_banking(theme)
