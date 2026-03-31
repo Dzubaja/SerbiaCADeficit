@@ -254,6 +254,48 @@ PEER_METRICS = [
 ]
 
 
+# ---------------------------------------------------------------------------
+# Currency conversion
+# ---------------------------------------------------------------------------
+
+# Columns that represent absolute monetary values (RSD 000) to convert to EUR 000
+_MONETARY_COLS = [
+    "TA", "Cash_CB", "Pledged", "Securities", "Loans_Banks", "Loans_Clients",
+    "Intangible", "PPE", "InvProp", "TotalCapital", "TotalLiab",
+    "Dep_Banks", "Dep_Clients",
+    "IntIncome", "IntExpense", "NII", "FeeIncome", "FeeExpense", "NetFeeInc",
+    "Trading_Net", "LLP_Net", "TotNetOpInc", "OtherInc", "OtherExp",
+    "PBT", "PAT", "TotalRev", "TotalOPEX",
+    "AvgTA", "AvgCapital",
+    # Annualized P&L
+    "PBT_ann", "NII_ann", "TotalRev_ann", "TotalOPEX_ann", "PAT_ann",
+    "IntIncome_ann", "IntExpense_ann", "LLP_Net_ann",
+]
+
+
+def convert_to_eur(df: pd.DataFrame, rates: dict) -> pd.DataFrame:
+    """Convert all monetary columns from RSD 000 to EUR 000 using quarter-end rates.
+
+    Args:
+        df: enriched DataFrame with DateLabel column
+        rates: dict {DateLabel: EUR/RSD rate}
+
+    Returns new DataFrame with monetary columns divided by the exchange rate.
+    Ratios remain unchanged.
+    """
+    df = df.copy()
+    # Map rate to each row
+    df["_fx_rate"] = df["DateLabel"].map(rates)
+    df["_fx_rate"] = df["_fx_rate"].fillna(117.2)  # fallback
+
+    for col in _MONETARY_COLS:
+        if col in df.columns:
+            df[col] = df[col] / df["_fx_rate"]
+
+    df = df.drop(columns=["_fx_rate"])
+    return df
+
+
 # Standard items for market share / ranking / item analysis
 ITEM_CHOICES = [
     ("TA",            "Total Assets",       "BS"),

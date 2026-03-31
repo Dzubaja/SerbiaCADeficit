@@ -7,10 +7,11 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 
-from banking.data_loader import load_data, get_bank_list, get_quarter_list
+from banking.data_loader import load_data, get_bank_list, get_quarter_list, get_eur_rsd_rates
 from banking.calculations import (
     enrich, sector_totals, market_share, rank_banks, concentration,
     yoy_growth, cagr, peer_table, PEER_METRICS, ITEM_CHOICES,
+    convert_to_eur,
 )
 from banking.charts import (
     ranking_bar, market_share_stacked, trend_line, growth_chart,
@@ -27,12 +28,13 @@ def _load():
     df = load_data()
     df = enrich(df)
     sec = sector_totals(df)
-    return df, sec
+    rates = get_eur_rsd_rates(df)
+    return df, sec, rates
 
 
 def render(theme="light"):
     """Main entry point — renders the full banking page."""
-    df, sec = _load()
+    df, sec, fx_rates = _load()
     banks = get_bank_list(df)
     quarters = get_quarter_list(df)
     latest_q = quarters[-1] if quarters else "2025Q4"
@@ -49,6 +51,19 @@ def render(theme="light"):
         selected_q = st.selectbox(
             "Quarter", quarters[::-1], index=0, key="bk_quarter",
         )
+    with sel3:
+        use_eur = st.toggle("EUR", value=False, key="bk_currency",
+                            help="Switch reporting currency between RSD and EUR (NBS official middle rate)")
+
+    # Currency unit label
+    ccy_unit = "EUR 000" if use_eur else "RSD 000"
+
+    # Convert if EUR selected
+    if use_eur:
+        df = convert_to_eur(df, fx_rates)
+        sec = convert_to_eur(sec, fx_rates)
+        rate_used = fx_rates.get(selected_q, 117.2)
+        st.caption(f"EUR/RSD rate for {selected_q}: **{rate_used:.4f}**  (NBS middle rate, quarter-end)")
 
     snap = df[df["DateLabel"] == selected_q]
     bank_snap = snap[snap["Bank"] == selected_bank]
@@ -63,14 +78,14 @@ def render(theme="light"):
     # ── Section 1: Sector Overview ──────────────────────────────────
     st.markdown('<div class="section-header">Sector Overview</div>',
                 unsafe_allow_html=True)
-    _render_sector_overview(df, sec, snap, sk, selected_q)
+    _render_sector_overview(df, sec, snap, sk, selected_q, ccy_unit)
 
     st.markdown("---")
 
     # ── Section 2: Bank KPIs ────────────────────────────────────────
     st.markdown(f'<div class="section-header">{selected_bank} — Key Metrics ({selected_q})</div>',
                 unsafe_allow_html=True)
-    _render_bank_kpis(bk, sk, selected_q)
+    _render_bank_kpis(bk, sk, selected_q, ccy_unit)
 
     st.markdown("---")
 
@@ -133,7 +148,7 @@ def render(theme="light"):
 # SECTION RENDERERS
 # ====================================================================
 
-def _render_sector_overview(df, sec, snap, sk, quarter):
+def _render_sector_overview(df, sec, snap, sk, quarter, unit="RSD 000"):
     """Sector KPIs + concentration + trend."""
     if sk is None:
         return
@@ -141,24 +156,24 @@ def _render_sector_overview(df, sec, snap, sk, quarter):
     k1, k2, k3, k4, k5 = st.columns(5)
     with k1:
         st.markdown(kpi_card("Sector Assets", sk["TA"],
-                             unit="RSD 000", css_class="kpi-neutral",
+                             unit=unit, css_class="kpi-neutral",
                              sub_text=quarter), unsafe_allow_html=True)
     with k2:
         st.markdown(kpi_card("Sector Loans", sk["Loans_Clients"],
-                             unit="RSD 000", css_class="kpi-neutral",
+                             unit=unit, css_class="kpi-neutral",
                              sub_text=quarter), unsafe_allow_html=True)
     with k3:
         st.markdown(kpi_card("Sector Deposits", sk["Dep_Clients"],
-                             unit="RSD 000", css_class="kpi-neutral",
+                             unit=unit, css_class="kpi-neutral",
                              sub_text=quarter), unsafe_allow_html=True)
     with k4:
         st.markdown(kpi_card("Sector Equity", sk["TotalCapital"],
-                             unit="RSD 000", css_class="kpi-neutral",
+                             unit=unit, css_class="kpi-neutral",
                              sub_text=quarter), unsafe_allow_html=True)
     with k5:
         pbt = sk["PBT"]
         st.markdown(kpi_card("Sector PBT", pbt,
-                             unit="RSD 000",
+                             unit=unit,
                              css_class="kpi-positive" if pbt > 0 else "kpi-negative",
                              sub_text=quarter), unsafe_allow_html=True)
 
@@ -186,29 +201,29 @@ def _render_sector_overview(df, sec, snap, sk, quarter):
         st.plotly_chart(fig, use_container_width=True)
 
 
-def _render_bank_kpis(bk, sk, quarter):
+def _render_bank_kpis(bk, sk, quarter, unit="RSD 000"):
     """Selected bank KPI cards."""
     k1, k2, k3, k4, k5 = st.columns(5)
     with k1:
         st.markdown(kpi_card("Total Assets", bk["TA"],
-                             unit="RSD 000", css_class="kpi-neutral",
+                             unit=unit, css_class="kpi-neutral",
                              sub_text=quarter), unsafe_allow_html=True)
     with k2:
         st.markdown(kpi_card("Customer Loans", bk["Loans_Clients"],
-                             unit="RSD 000", css_class="kpi-neutral",
+                             unit=unit, css_class="kpi-neutral",
                              sub_text=quarter), unsafe_allow_html=True)
     with k3:
         st.markdown(kpi_card("Customer Deposits", bk["Dep_Clients"],
-                             unit="RSD 000", css_class="kpi-neutral",
+                             unit=unit, css_class="kpi-neutral",
                              sub_text=quarter), unsafe_allow_html=True)
     with k4:
         st.markdown(kpi_card("Equity", bk["TotalCapital"],
-                             unit="RSD 000", css_class="kpi-neutral",
+                             unit=unit, css_class="kpi-neutral",
                              sub_text=quarter), unsafe_allow_html=True)
     with k5:
         pbt = bk["PBT"]
         st.markdown(kpi_card("Profit (PBT)", pbt,
-                             unit="RSD 000",
+                             unit=unit,
                              css_class="kpi-positive" if pbt > 0 else "kpi-negative",
                              sub_text=quarter), unsafe_allow_html=True)
 

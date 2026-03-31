@@ -6,11 +6,14 @@ Falls back to raw Banke.xlsx if CEO file is unavailable.
 """
 
 import pandas as pd
+import json
+import urllib.request
+import ssl
 from pathlib import Path
 
-_ROOT = Path(__file__).parent.parent.parent  # project root (1. Contex folder)
-CEO_PATH = _ROOT / "CEO_Dashboard_v4.xlsx"
-BANKE_PATH = _ROOT / "Banke.xlsx"
+_ROOT = Path(__file__).parent.parent  # nbs_dashboard/
+CEO_PATH = _ROOT / "data" / "CEO_Dashboard_v4.xlsx"
+BANKE_PATH = _ROOT / "data" / "Banke.xlsx"
 
 # Bank short-name mapping (from CEO Dashboard Mapping sheet)
 _BANK_SHORT = {
@@ -151,3 +154,66 @@ def get_bank_list(df: pd.DataFrame) -> list:
 def get_quarter_list(df: pd.DataFrame) -> list:
     """Sorted list of quarter labels (e.g. '2019Q1' ... '2025Q4')."""
     return sorted(df["DateLabel"].unique())
+
+
+# ── EUR/RSD exchange rates ────────────────────────────────────────────
+
+_FX_CACHE_FILE = _ROOT / "data" / "eur_rsd_rates.json"
+_KURS_API = "https://kurs.resenje.org/api/v1/currencies/eur/rates/{}"
+
+
+def _fetch_rate(date_str: str) -> float:
+    """Fetch EUR/RSD middle rate for a single date from Kurs API."""
+    url = _KURS_API.format(date_str)
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    resp = urllib.request.urlopen(req, timeout=10, context=ctx)
+    data = json.loads(resp.read())
+    return float(data["exchange_middle"])
+
+
+def get_eur_rsd_rates(df: pd.DataFrame) -> dict:
+    """Get EUR/RSD middle exchange rates for all quarter-end dates in the data.
+
+    Returns dict: {DateLabel: rate} e.g. {'2019Q1': 117.972, ...}
+    Caches to disk to avoid repeated API calls.
+    """
+    # Build required dates
+    date_map = {}  # DateLabel -> date_str
+    for _, row in df[["DateLabel", "Date"]].drop_duplicates("DateLabel").iterrows():
+        dt = pd.Timestamp(row["Date"])
+        date_map[row["DateLabel"]] = dt.strftime("%Y-%m-%d")
+
+    # Load cache
+    cached = {}
+    if _FX_CACHE_FILE.exists():
+        with open(_FX_CACHE_FILE, "r") as f:
+            cached = json.load(f)
+
+    # Fetch missing
+    rates = {}
+    updated = False
+    for dl, ds in sorted(date_map.items()):
+        if dl in cached:
+            rates[dl] = cached[dl]
+        else:
+            try:
+                rate = _fetch_rate(ds)
+                rates[dl] = rate
+                cached[dl] = rate
+                updated = True
+            except Exception:
+                # Fallback: use ~117.2 (approximate recent EUR/RSD)
+                rates[dl] = 117.2
+                cached[dl] = 117.2
+                updated = True
+
+    # Save cache
+    if updated:
+        _FX_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(_FX_CACHE_FILE, "w") as f:
+            json.dump(cached, f, indent=2)
+
+    return rates
