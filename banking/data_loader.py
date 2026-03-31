@@ -11,7 +11,25 @@ import urllib.request
 import ssl
 from pathlib import Path
 
-_ROOT = Path(__file__).parent.parent  # nbs_dashboard/
+def _find_root() -> Path:
+    """Find the project root (directory containing app.py and data/)."""
+    # Strategy 1: relative to this file (banking/data_loader.py -> parent.parent)
+    p = Path(__file__).resolve().parent.parent
+    if (p / "data" / "CEO_Dashboard_v4.xlsx").exists():
+        return p
+    # Strategy 2: current working directory
+    cwd = Path.cwd()
+    if (cwd / "data" / "CEO_Dashboard_v4.xlsx").exists():
+        return cwd
+    # Strategy 3: look for app.py upward from this file
+    for ancestor in Path(__file__).resolve().parents:
+        if (ancestor / "data" / "CEO_Dashboard_v4.xlsx").exists():
+            return ancestor
+    # Fallback: assume parent.parent
+    return Path(__file__).resolve().parent.parent
+
+
+_ROOT = _find_root()
 CEO_PATH = _ROOT / "data" / "CEO_Dashboard_v4.xlsx"
 BANKE_PATH = _ROOT / "data" / "Banke.xlsx"
 
@@ -83,7 +101,15 @@ def load_data() -> pd.DataFrame:
     """Load the main banking dataset. Returns a DataFrame with one row per bank-quarter."""
     if CEO_PATH.exists():
         return _load_from_ceo()
-    return _load_from_raw()
+    if BANKE_PATH.exists():
+        return _load_from_raw()
+    raise FileNotFoundError(
+        f"Banking data files not found.\n"
+        f"  CEO_PATH: {CEO_PATH} (exists={CEO_PATH.exists()})\n"
+        f"  BANKE_PATH: {BANKE_PATH} (exists={BANKE_PATH.exists()})\n"
+        f"  _ROOT: {_ROOT} (exists={_ROOT.exists()})\n"
+        f"  _ROOT/data contents: {list(_ROOT.joinpath('data').glob('*')) if _ROOT.joinpath('data').exists() else 'data/ not found'}"
+    )
 
 
 def _load_from_ceo() -> pd.DataFrame:
@@ -210,10 +236,13 @@ def get_eur_rsd_rates(df: pd.DataFrame) -> dict:
                 cached[dl] = 117.2
                 updated = True
 
-    # Save cache
+    # Save cache (may fail on read-only filesystems like Streamlit Cloud)
     if updated:
-        _FX_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
-        with open(_FX_CACHE_FILE, "w") as f:
-            json.dump(cached, f, indent=2)
+        try:
+            _FX_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+            with open(_FX_CACHE_FILE, "w") as f:
+                json.dump(cached, f, indent=2)
+        except OSError:
+            pass  # read-only filesystem, skip caching
 
     return rates
