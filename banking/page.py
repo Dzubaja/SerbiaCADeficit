@@ -11,14 +11,14 @@ from banking.data_loader import load_data, get_bank_list, get_quarter_list, get_
 from banking.calculations import (
     enrich, sector_totals, market_share, rank_banks, concentration,
     yoy_growth, cagr, peer_table, PEER_METRICS, ITEM_CHOICES,
-    convert_to_eur,
+    convert_to_eur, kpi_changes,
 )
 from banking.charts import (
     ranking_bar, market_share_stacked, trend_line, growth_chart,
     rank_bump, composition_bar, scatter_quadrant, concentration_chart,
     multi_bank_line, COLORS, _fmt_rsd,
 )
-from dashboard.styles import kpi_card
+from banking.styles import enhanced_kpi, get_banking_css
 
 
 # ── Data loading (cached) ────────────────────────────────────────────
@@ -34,6 +34,7 @@ def _load():
 
 def render(theme="light"):
     """Main entry point — renders the full banking page."""
+    st.markdown(get_banking_css(theme), unsafe_allow_html=True)
     df, sec, fx_rates = _load()
     banks = get_bank_list(df)
     quarters = get_quarter_list(df)
@@ -85,7 +86,7 @@ def render(theme="light"):
     # ── Section 2: Bank KPIs ────────────────────────────────────────
     st.markdown(f'<div class="section-header">{selected_bank} — Key Metrics ({selected_q})</div>',
                 unsafe_allow_html=True)
-    _render_bank_kpis(bk, sk, selected_q, ccy_unit)
+    _render_bank_kpis(df, selected_bank, bk, sk, selected_q, ccy_unit)
 
     st.markdown("---")
 
@@ -153,45 +154,49 @@ def _render_sector_overview(df, sec, snap, sk, quarter, unit="RSD 000"):
     if sk is None:
         return
 
+    def _sec_kpi(label, col, css="kpi-neutral", hib=True):
+        ch = kpi_changes(sec, "SECTOR", quarter, col)
+        return enhanced_kpi(label, sk[col], unit=unit, css_class=css,
+                            sub_text=quarter, sparkline_values=ch["sparkline"],
+                            qoq_abs=ch["qoq_abs"], qoq_pct=ch["qoq_pct"],
+                            yoy_abs=ch["yoy_abs"], yoy_pct=ch["yoy_pct"],
+                            higher_is_better=hib)
+
     k1, k2, k3, k4, k5 = st.columns(5)
     with k1:
-        st.markdown(kpi_card("Sector Assets", sk["TA"],
-                             unit=unit, css_class="kpi-neutral",
-                             sub_text=quarter), unsafe_allow_html=True)
+        st.markdown(_sec_kpi("Sector Assets", "TA"), unsafe_allow_html=True)
     with k2:
-        st.markdown(kpi_card("Sector Loans", sk["Loans_Clients"],
-                             unit=unit, css_class="kpi-neutral",
-                             sub_text=quarter), unsafe_allow_html=True)
+        st.markdown(_sec_kpi("Sector Loans", "Loans_Clients"), unsafe_allow_html=True)
     with k3:
-        st.markdown(kpi_card("Sector Deposits", sk["Dep_Clients"],
-                             unit=unit, css_class="kpi-neutral",
-                             sub_text=quarter), unsafe_allow_html=True)
+        st.markdown(_sec_kpi("Sector Deposits", "Dep_Clients"), unsafe_allow_html=True)
     with k4:
-        st.markdown(kpi_card("Sector Equity", sk["TotalCapital"],
-                             unit=unit, css_class="kpi-neutral",
-                             sub_text=quarter), unsafe_allow_html=True)
+        st.markdown(_sec_kpi("Sector Equity", "TotalCapital"), unsafe_allow_html=True)
     with k5:
         pbt = sk["PBT"]
-        st.markdown(kpi_card("Sector PBT", pbt,
-                             unit=unit,
-                             css_class="kpi-positive" if pbt > 0 else "kpi-negative",
-                             sub_text=quarter), unsafe_allow_html=True)
+        css = "kpi-positive" if pbt > 0 else "kpi-negative"
+        st.markdown(_sec_kpi("Sector PBT", "PBT", css=css), unsafe_allow_html=True)
 
     # Sector ratio KPIs
+    def _sec_ratio(label, col, hib=True):
+        ch = kpi_changes(sec, "SECTOR", quarter, col)
+        return enhanced_kpi(label, sk[col], unit="", css_class="kpi-neutral",
+                            sub_text=quarter, sparkline_values=ch["sparkline"],
+                            qoq_pct=ch.get("qoq_abs"), yoy_pct=ch.get("yoy_abs"),
+                            is_ratio=True, higher_is_better=hib)
+
     r1, r2, r3, r4 = st.columns(4)
     with r1:
-        st.metric("Sector ROA (ann.)", f"{sk['ROA']:.2%}")
+        st.markdown(_sec_ratio("Sector ROA", "ROA"), unsafe_allow_html=True)
     with r2:
-        st.metric("Sector ROE (ann.)", f"{sk['ROE']:.2%}")
+        st.markdown(_sec_ratio("Sector ROE", "ROE"), unsafe_allow_html=True)
     with r3:
-        st.metric("Sector NIM (ann.)", f"{sk['NIM']:.2%}")
+        st.markdown(_sec_ratio("Sector NIM", "NIM"), unsafe_allow_html=True)
     with r4:
-        st.metric("Sector C/I", f"{sk['CIR']:.1%}")
+        st.markdown(_sec_ratio("Sector C/I", "CIR", hib=False), unsafe_allow_html=True)
 
     # Concentration + sector trends
     c1, c2 = st.columns(2)
     with c1:
-        conc5 = concentration(snap, "TA", 5)
         conc_hist = concentration(df, "TA", 5)
         fig = concentration_chart(conc_hist, "Top-5 Asset Concentration")
         st.plotly_chart(fig, use_container_width=True)
@@ -201,46 +206,52 @@ def _render_sector_overview(df, sec, snap, sk, quarter, unit="RSD 000"):
         st.plotly_chart(fig, use_container_width=True)
 
 
-def _render_bank_kpis(bk, sk, quarter, unit="RSD 000"):
-    """Selected bank KPI cards."""
+def _render_bank_kpis(df, bank, bk, sk, quarter, unit="RSD 000"):
+    """Selected bank KPI cards with sparklines + QoQ/YoY."""
+
+    def _bk_kpi(label, col, css="kpi-neutral", hib=True):
+        ch = kpi_changes(df, bank, quarter, col)
+        return enhanced_kpi(label, bk[col], unit=unit, css_class=css,
+                            sub_text=quarter, sparkline_values=ch["sparkline"],
+                            qoq_abs=ch["qoq_abs"], qoq_pct=ch["qoq_pct"],
+                            yoy_abs=ch["yoy_abs"], yoy_pct=ch["yoy_pct"],
+                            higher_is_better=hib)
+
     k1, k2, k3, k4, k5 = st.columns(5)
     with k1:
-        st.markdown(kpi_card("Total Assets", bk["TA"],
-                             unit=unit, css_class="kpi-neutral",
-                             sub_text=quarter), unsafe_allow_html=True)
+        st.markdown(_bk_kpi("Total Assets", "TA"), unsafe_allow_html=True)
     with k2:
-        st.markdown(kpi_card("Customer Loans", bk["Loans_Clients"],
-                             unit=unit, css_class="kpi-neutral",
-                             sub_text=quarter), unsafe_allow_html=True)
+        st.markdown(_bk_kpi("Customer Loans", "Loans_Clients"), unsafe_allow_html=True)
     with k3:
-        st.markdown(kpi_card("Customer Deposits", bk["Dep_Clients"],
-                             unit=unit, css_class="kpi-neutral",
-                             sub_text=quarter), unsafe_allow_html=True)
+        st.markdown(_bk_kpi("Customer Deposits", "Dep_Clients"), unsafe_allow_html=True)
     with k4:
-        st.markdown(kpi_card("Equity", bk["TotalCapital"],
-                             unit=unit, css_class="kpi-neutral",
-                             sub_text=quarter), unsafe_allow_html=True)
+        st.markdown(_bk_kpi("Equity", "TotalCapital"), unsafe_allow_html=True)
     with k5:
         pbt = bk["PBT"]
-        st.markdown(kpi_card("Profit (PBT)", pbt,
-                             unit=unit,
-                             css_class="kpi-positive" if pbt > 0 else "kpi-negative",
-                             sub_text=quarter), unsafe_allow_html=True)
+        css = "kpi-positive" if pbt > 0 else "kpi-negative"
+        st.markdown(_bk_kpi("Profit (PBT)", "PBT", css=css), unsafe_allow_html=True)
 
-    # Ratio row
+    # Ratio row with sparklines + QoQ/YoY in basis points
+    def _ratio_kpi(label, col, hib=True):
+        ch = kpi_changes(df, bank, quarter, col)
+        return enhanced_kpi(label, bk[col], unit="", css_class="kpi-neutral",
+                            sub_text=quarter, sparkline_values=ch["sparkline"],
+                            qoq_pct=ch.get("qoq_abs"), yoy_pct=ch.get("yoy_abs"),
+                            is_ratio=True, higher_is_better=hib)
+
     r1, r2, r3, r4, r5, r6 = st.columns(6)
     with r1:
-        st.metric("ROA (ann.)", f"{bk['ROA']:.2%}")
+        st.markdown(_ratio_kpi("ROA (ann.)", "ROA"), unsafe_allow_html=True)
     with r2:
-        st.metric("ROE (ann.)", f"{bk['ROE']:.2%}")
+        st.markdown(_ratio_kpi("ROE (ann.)", "ROE"), unsafe_allow_html=True)
     with r3:
-        st.metric("NIM (ann.)", f"{bk['NIM']:.2%}")
+        st.markdown(_ratio_kpi("NIM (ann.)", "NIM"), unsafe_allow_html=True)
     with r4:
-        st.metric("C/I Ratio", f"{bk['CIR']:.1%}")
+        st.markdown(_ratio_kpi("C/I Ratio", "CIR", hib=False), unsafe_allow_html=True)
     with r5:
-        st.metric("Loan-to-Deposit", f"{bk['LtD']:.1%}")
+        st.markdown(_ratio_kpi("Loan/Deposit", "LtD", hib=False), unsafe_allow_html=True)
     with r6:
-        st.metric("Capital Ratio", f"{bk['CapR']:.1%}")
+        st.markdown(_ratio_kpi("Capital Ratio", "CapR"), unsafe_allow_html=True)
 
 
 def _render_market_position(df, snap, bank, quarter):

@@ -171,6 +171,56 @@ def yoy_growth(df: pd.DataFrame, col: str) -> pd.DataFrame:
     return d[["Bank", "DateLabel", "value", "prev_value", "abs_change", "pct_change"]]
 
 
+def kpi_changes(df: pd.DataFrame, bank: str, quarter: str, col: str,
+                n_spark: int = 8) -> dict:
+    """Compute QoQ change, YoY change, and sparkline values for a KPI.
+
+    Returns dict with keys:
+        qoq_abs, qoq_pct, yoy_abs, yoy_pct, sparkline (list of recent values)
+    """
+    d = df[df["Bank"] == bank].sort_values("DateLabel")
+    if d.empty or col not in d.columns:
+        return {"qoq_abs": None, "qoq_pct": None,
+                "yoy_abs": None, "yoy_pct": None, "sparkline": []}
+
+    quarters = sorted(d["DateLabel"].unique())
+    if quarter not in quarters:
+        return {"qoq_abs": None, "qoq_pct": None,
+                "yoy_abs": None, "yoy_pct": None, "sparkline": []}
+
+    idx = quarters.index(quarter)
+    curr = d[d["DateLabel"] == quarter][col].iloc[0]
+
+    # QoQ: previous quarter
+    qoq_abs, qoq_pct = None, None
+    if idx >= 1:
+        prev_q = quarters[idx - 1]
+        prev_val = d[d["DateLabel"] == prev_q][col].iloc[0]
+        if prev_val != 0:
+            qoq_abs = curr - prev_val
+            qoq_pct = (curr - prev_val) / abs(prev_val) * 100
+
+    # YoY: same quarter last year (4 quarters back)
+    yoy_abs, yoy_pct = None, None
+    if idx >= 4:
+        prev_y = quarters[idx - 4]
+        prev_val = d[d["DateLabel"] == prev_y][col].iloc[0]
+        if prev_val != 0:
+            yoy_abs = curr - prev_val
+            yoy_pct = (curr - prev_val) / abs(prev_val) * 100
+
+    # Sparkline: last n_spark quarters up to and including current
+    start = max(0, idx - n_spark + 1)
+    spark_qs = quarters[start:idx + 1]
+    spark_vals = [d[d["DateLabel"] == q][col].iloc[0] for q in spark_qs]
+
+    return {
+        "qoq_abs": qoq_abs, "qoq_pct": qoq_pct,
+        "yoy_abs": yoy_abs, "yoy_pct": yoy_pct,
+        "sparkline": spark_vals,
+    }
+
+
 def cagr(start_val: float, end_val: float, years: float) -> float:
     """Compound annual growth rate."""
     if start_val <= 0 or end_val <= 0 or years <= 0:
